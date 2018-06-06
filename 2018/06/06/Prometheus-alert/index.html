@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+
+
+
+  
+
+
+<html class="theme-next gemini use-motion" lang="zh-Hans">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+<meta name="theme-color" content="#222">
+
+
+
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.4" rel="stylesheet" type="text/css" />
+
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png?v=5.1.4">
+
+
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png?v=5.1.4">
+
+
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png?v=5.1.4">
+
+
+  <link rel="mask-icon" href="/images/logo.svg?v=5.1.4" color="#222">
+
+
+
+
+
+  <meta name="keywords" content="Hexo, NexT" />
+
+
+
+
+
+
+
+
+
+
+<meta name="description" content="本文从源码角度分析了Prometheus的告警功能实现原理，需要注意，本文中的源码基于Prometheus 2.2.1版本，在分析过程中，只注重告警相关代码逻辑，而忽略了其他无关代码。 Prometheus的告警也是通过Manager进行管理的，其结构和构造函数如下123456789101112131415161718192021type Manager struct &amp;#123;	opts">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Prometheus源码分析之告警">
+<meta property="og:url" content="http://yoursite.com/2018/06/06/Prometheus-alert/index.html">
+<meta property="og:site_name" content="Wu&#39;s blog">
+<meta property="og:description" content="本文从源码角度分析了Prometheus的告警功能实现原理，需要注意，本文中的源码基于Prometheus 2.2.1版本，在分析过程中，只注重告警相关代码逻辑，而忽略了其他无关代码。 Prometheus的告警也是通过Manager进行管理的，其结构和构造函数如下123456789101112131415161718192021type Manager struct &amp;#123;	opts">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2018-06-06T15:01:07.309Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Prometheus源码分析之告警">
+<meta name="twitter:description" content="本文从源码角度分析了Prometheus的告警功能实现原理，需要注意，本文中的源码基于Prometheus 2.2.1版本，在分析过程中，只注重告警相关代码逻辑，而忽略了其他无关代码。 Prometheus的告警也是通过Manager进行管理的，其结构和构造函数如下123456789101112131415161718192021type Manager struct &amp;#123;	opts">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Gemini',
+    version: '5.1.4',
+    sidebar: {"position":"left","display":"post","offset":12,"b2t":false,"scrollpercent":false,"onmobile":false},
+    fancybox: true,
+    tabs: true,
+    motion: {"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://yoursite.com/2018/06/06/Prometheus-alert/"/>
+
+
+
+
+
+  <title>Prometheus源码分析之告警 | Wu's blog</title>
+  
+
+
+
+
+
+
+
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">Wu's blog</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle"></p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+
+      
+    </ul>
+  
+
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal" itemscope itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2018/06/06/Prometheus-alert/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Han Wu">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Wu's blog">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">Prometheus源码分析之告警</h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2018-06-06T23:00:11+08:00">
+                2018-06-06
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+
+          
+            
+              <span class="post-comments-count">
+                <span class="post-meta-divider">|</span>
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-comment-o"></i>
+                </span>
+                <a href="/2018/06/06/Prometheus-alert/#comments" itemprop="discussionUrl">
+                  <span class="post-comments-count gitment-comments-count" data-xid="/2018/06/06/Prometheus-alert/" itemprop="commentsCount"></span>
+                </a>
+              </span>
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>本文从源码角度分析了Prometheus的告警功能实现原理，需要注意，本文中的源码基于Prometheus 2.2.1版本，在分析过程中，只注重告警相关代码逻辑，而忽略了其他无关代码。</p>
+<p>Prometheus的告警也是通过<code>Manager</code>进行管理的，其结构和构造函数如下<br><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> Manager <span class="keyword">struct</span> &#123;</span><br><span class="line">	opts   *ManagerOptions</span><br><span class="line">	groups <span class="keyword">map</span>[<span class="keyword">string</span>]*Group</span><br><span class="line">	mtx    sync.RWMutex</span><br><span class="line">	block  <span class="keyword">chan</span> <span class="keyword">struct</span>&#123;&#125;</span><br><span class="line"></span><br><span class="line">	logger log.Logger</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">NewManager</span><span class="params">(o *ManagerOptions)</span> *<span class="title">Manager</span></span> &#123;</span><br><span class="line">	m := &amp;Manager&#123;</span><br><span class="line">		groups: <span class="keyword">map</span>[<span class="keyword">string</span>]*Group&#123;&#125;,</span><br><span class="line">		opts:   o,</span><br><span class="line">		block:  <span class="built_in">make</span>(<span class="keyword">chan</span> <span class="keyword">struct</span>&#123;&#125;),</span><br><span class="line">		logger: o.Logger,</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">if</span> o.Registerer != <span class="literal">nil</span> &#123;</span><br><span class="line">		o.Registerer.MustRegister(m)</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> m</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>构造函数主要负责初始化<code>ManagerOptions</code>。</p>
+<p>在main.go中，创建了一个<code>ruleManager</code><br><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">ruleManager = rules.NewManager(&amp;rules.ManagerOptions&#123;</span><br><span class="line">			Appendable:  fanoutStorage,</span><br><span class="line">			QueryFunc:   rules.EngineQueryFunc(queryEngine, fanoutStorage),</span><br><span class="line">			NotifyFunc:  sendAlerts(notifier, cfg.web.ExternalURL.String()),</span><br><span class="line">			Context:     ctxRule,</span><br><span class="line">			ExternalURL: cfg.web.ExternalURL,</span><br><span class="line">			Registerer:  prometheus.DefaultRegisterer,</span><br><span class="line">			Logger:      log.With(logger, <span class="string">"component"</span>, <span class="string">"rule manager"</span>),</span><br><span class="line">        &#125;</span><br></pre></td></tr></table></figure></p>
+<a id="more"></a>
+<p>该Manager通过Run函数启动<br><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// Run starts processing of the rule manager.</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(m *Manager)</span> <span class="title">Run</span><span class="params">()</span></span> &#123;</span><br><span class="line">	<span class="built_in">close</span>(m.block)</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p><code>m.block</code>在另一个函数Update中<br><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// Update the rule manager's state as the config requires. If</span></span><br><span class="line"><span class="comment">// loading the new rules failed the old rule set is restored.</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(m *Manager)</span> <span class="title">Update</span><span class="params">(interval time.Duration, files []<span class="keyword">string</span>)</span> <span class="title">error</span></span> &#123;</span><br><span class="line">	m.mtx.Lock()</span><br><span class="line">	<span class="keyword">defer</span> m.mtx.Unlock()</span><br><span class="line"></span><br><span class="line">	<span class="comment">// To be replaced with a configurable per-group interval.</span></span><br><span class="line">	groups, errs := m.loadGroups(interval, files...)</span><br><span class="line">	<span class="keyword">if</span> errs != <span class="literal">nil</span> &#123;</span><br><span class="line">		<span class="keyword">for</span> _, e := <span class="keyword">range</span> errs &#123;</span><br><span class="line">			level.Error(m.logger).Log(<span class="string">"msg"</span>, <span class="string">"loading groups failed"</span>, <span class="string">"err"</span>, e)</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">return</span> errors.New(<span class="string">"error loading rules, previous rule set restored"</span>)</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">var</span> wg sync.WaitGroup</span><br><span class="line"></span><br><span class="line">	<span class="keyword">for</span> _, newg := <span class="keyword">range</span> groups &#123;</span><br><span class="line">		wg.Add(<span class="number">1</span>)</span><br><span class="line"></span><br><span class="line">		<span class="comment">// If there is an old group with the same identifier, stop it and wait for</span></span><br><span class="line">		<span class="comment">// it to finish the current iteration. Then copy it into the new group.</span></span><br><span class="line">		gn := groupKey(newg.name, newg.file)</span><br><span class="line">		oldg, ok := m.groups[gn]</span><br><span class="line">		<span class="built_in">delete</span>(m.groups, gn)</span><br><span class="line"></span><br><span class="line">		<span class="keyword">go</span> <span class="function"><span class="keyword">func</span><span class="params">(newg *Group)</span></span> &#123;</span><br><span class="line">			<span class="keyword">if</span> ok &#123;</span><br><span class="line">				oldg.stop()</span><br><span class="line">				newg.copyState(oldg)</span><br><span class="line">			&#125;</span><br><span class="line">			<span class="keyword">go</span> <span class="function"><span class="keyword">func</span><span class="params">()</span></span> &#123;</span><br><span class="line">				<span class="comment">// Wait with starting evaluation until the rule manager</span></span><br><span class="line">				<span class="comment">// is told to run. This is necessary to avoid running</span></span><br><span class="line">				<span class="comment">// queries against a bootstrapping storage.</span></span><br><span class="line">				&lt;-m.block</span><br><span class="line">				newg.run(m.opts.Context)</span><br><span class="line">			&#125;()</span><br><span class="line">			wg.Done()</span><br><span class="line">		&#125;(newg)</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="comment">// Stop remaining old groups.</span></span><br><span class="line">	<span class="keyword">for</span> _, oldg := <span class="keyword">range</span> m.groups &#123;</span><br><span class="line">		oldg.stop()</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	wg.Wait()</span><br><span class="line">	m.groups = groups</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p><code>m.block</code>是一个channel，<code>close</code>操作后，这行代码不再阻塞，因此执行<code>newg.run(m.opts.Context)</code>，这里run的其实是group，所以，启动ruleManager其实是启动其中的所有groups。由于每个group都在自己的goroutine中运行，所以group是并发执行的。</p>
+<p>group的<code>run</code>函数如下<br><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(g *Group)</span> <span class="title">run</span><span class="params">(ctx context.Context)</span></span> &#123;</span><br><span class="line">	<span class="keyword">defer</span> <span class="built_in">close</span>(g.terminated)</span><br><span class="line"></span><br><span class="line">	<span class="comment">// Wait an initial amount to have consistently slotted intervals.</span></span><br><span class="line">	<span class="keyword">select</span> &#123;</span><br><span class="line">	<span class="keyword">case</span> &lt;-time.After(g.offset()):</span><br><span class="line">	<span class="keyword">case</span> &lt;-g.done:</span><br><span class="line">		<span class="keyword">return</span></span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	iter := <span class="function"><span class="keyword">func</span><span class="params">()</span></span> &#123;</span><br><span class="line">		iterationsScheduled.Inc()</span><br><span class="line"></span><br><span class="line">		start := time.Now()</span><br><span class="line">		g.Eval(ctx, start)</span><br><span class="line"></span><br><span class="line">		iterationDuration.Observe(time.Since(start).Seconds())</span><br><span class="line">		g.SetEvaluationTime(time.Since(start))</span><br><span class="line">	&#125;</span><br><span class="line">	lastTriggered := time.Now()</span><br><span class="line">	iter()</span><br><span class="line"></span><br><span class="line">	tick := time.NewTicker(g.interval)</span><br><span class="line">	<span class="keyword">defer</span> tick.Stop()</span><br><span class="line"></span><br><span class="line">	<span class="keyword">for</span> &#123;</span><br><span class="line">		<span class="keyword">select</span> &#123;</span><br><span class="line">		<span class="keyword">case</span> &lt;-g.done:</span><br><span class="line">			<span class="keyword">return</span></span><br><span class="line">		<span class="keyword">default</span>:</span><br><span class="line">			<span class="keyword">select</span> &#123;</span><br><span class="line">			<span class="keyword">case</span> &lt;-g.done:</span><br><span class="line">				<span class="keyword">return</span></span><br><span class="line">			<span class="keyword">case</span> &lt;-tick.C:</span><br><span class="line">				missed := (time.Since(lastTriggered).Nanoseconds() / g.interval.Nanoseconds()) - <span class="number">1</span></span><br><span class="line">				<span class="keyword">if</span> missed &gt; <span class="number">0</span> &#123;</span><br><span class="line">					iterationsMissed.Add(<span class="keyword">float64</span>(missed))</span><br><span class="line">					iterationsScheduled.Add(<span class="keyword">float64</span>(missed))</span><br><span class="line">				&#125;</span><br><span class="line">				lastTriggered = time.Now()</span><br><span class="line">				iter()</span><br><span class="line">			&#125;</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>其中有一个无限循环，通过一个Ticker实现每隔一定的时间（group的interval）执行<code>iter</code>，<code>iter</code>是一个匿名函数，主要是调用了<code>Eval</code>函数，其代码如下<br><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// Eval runs a single evaluation cycle in which all rules are evaluated sequentially.</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(g *Group)</span> <span class="title">Eval</span><span class="params">(ctx context.Context, ts time.Time)</span></span> &#123;</span><br><span class="line">	<span class="keyword">for</span> i, rule := <span class="keyword">range</span> g.rules &#123;</span><br><span class="line">		<span class="keyword">select</span> &#123;</span><br><span class="line">		<span class="keyword">case</span> &lt;-g.done:</span><br><span class="line">			<span class="keyword">return</span></span><br><span class="line">		<span class="keyword">default</span>:</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		<span class="function"><span class="keyword">func</span><span class="params">(i <span class="keyword">int</span>, rule Rule)</span></span> &#123;</span><br><span class="line">			<span class="keyword">defer</span> <span class="function"><span class="keyword">func</span><span class="params">(t time.Time)</span></span> &#123;</span><br><span class="line">				evalDuration.Observe(time.Since(t).Seconds())</span><br><span class="line">				rule.SetEvaluationTime(time.Since(t))</span><br><span class="line">			&#125;(time.Now())</span><br><span class="line"></span><br><span class="line">			evalTotal.Inc()</span><br><span class="line"></span><br><span class="line">			vector, err := rule.Eval(ctx, ts, g.opts.QueryFunc, g.opts.ExternalURL)</span><br><span class="line">			<span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">				<span class="comment">// Canceled queries are intentional termination of queries. This normally</span></span><br><span class="line">				<span class="comment">// happens on shutdown and thus we skip logging of any errors here.</span></span><br><span class="line">				<span class="keyword">if</span> _, ok := err.(promql.ErrQueryCanceled); !ok &#123;</span><br><span class="line">					level.Warn(g.logger).Log(<span class="string">"msg"</span>, <span class="string">"Evaluating rule failed"</span>, <span class="string">"rule"</span>, rule, <span class="string">"err"</span>, err)</span><br><span class="line">				&#125;</span><br><span class="line">				evalFailures.Inc()</span><br><span class="line">				<span class="keyword">return</span></span><br><span class="line">			&#125;</span><br><span class="line"></span><br><span class="line">			<span class="keyword">if</span> ar, ok := rule.(*AlertingRule); ok &#123;</span><br><span class="line">				g.opts.NotifyFunc(ctx, ar.vector.String(), ar.currentAlerts()...)</span><br><span class="line">			&#125;</span><br><span class="line">			<span class="keyword">var</span> (</span><br><span class="line">				numOutOfOrder = <span class="number">0</span></span><br><span class="line">				numDuplicates = <span class="number">0</span></span><br><span class="line">			)</span><br><span class="line"></span><br><span class="line">			app, err := g.opts.Appendable.Appender()</span><br><span class="line">			<span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">				level.Warn(g.logger).Log(<span class="string">"msg"</span>, <span class="string">"creating appender failed"</span>, <span class="string">"err"</span>, err)</span><br><span class="line">				<span class="keyword">return</span></span><br><span class="line">			&#125;</span><br><span class="line"></span><br><span class="line">			seriesReturned := <span class="built_in">make</span>(<span class="keyword">map</span>[<span class="keyword">string</span>]labels.Labels, <span class="built_in">len</span>(g.seriesInPreviousEval[i]))</span><br><span class="line">			<span class="keyword">for</span> _, s := <span class="keyword">range</span> vector &#123;</span><br><span class="line">				<span class="keyword">if</span> _, err := app.Add(s.Metric, s.T, s.V); err != <span class="literal">nil</span> &#123;</span><br><span class="line">					<span class="keyword">switch</span> err &#123;</span><br><span class="line">					<span class="keyword">case</span> storage.ErrOutOfOrderSample:</span><br><span class="line">						numOutOfOrder++</span><br><span class="line">						level.Debug(g.logger).Log(<span class="string">"msg"</span>, <span class="string">"Rule evaluation result discarded"</span>, <span class="string">"err"</span>, err, <span class="string">"sample"</span>, s)</span><br><span class="line">					<span class="keyword">case</span> storage.ErrDuplicateSampleForTimestamp:</span><br><span class="line">						numDuplicates++</span><br><span class="line">						level.Debug(g.logger).Log(<span class="string">"msg"</span>, <span class="string">"Rule evaluation result discarded"</span>, <span class="string">"err"</span>, err, <span class="string">"sample"</span>, s)</span><br><span class="line">					<span class="keyword">default</span>:</span><br><span class="line">						level.Warn(g.logger).Log(<span class="string">"msg"</span>, <span class="string">"Rule evaluation result discarded"</span>, <span class="string">"err"</span>, err, <span class="string">"sample"</span>, s)</span><br><span class="line">					&#125;</span><br><span class="line">				&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">					seriesReturned[s.Metric.String()] = s.Metric</span><br><span class="line">				&#125;</span><br><span class="line">			&#125;</span><br><span class="line">			<span class="keyword">if</span> numOutOfOrder &gt; <span class="number">0</span> &#123;</span><br><span class="line">				level.Warn(g.logger).Log(<span class="string">"msg"</span>, <span class="string">"Error on ingesting out-of-order result from rule evaluation"</span>, <span class="string">"numDropped"</span>, numOutOfOrder)</span><br><span class="line">			&#125;</span><br><span class="line">			<span class="keyword">if</span> numDuplicates &gt; <span class="number">0</span> &#123;</span><br><span class="line">				level.Warn(g.logger).Log(<span class="string">"msg"</span>, <span class="string">"Error on ingesting results from rule evaluation with different value but same timestamp"</span>, <span class="string">"numDropped"</span>, numDuplicates)</span><br><span class="line">			&#125;</span><br><span class="line"></span><br><span class="line">			<span class="keyword">for</span> metric, lset := <span class="keyword">range</span> g.seriesInPreviousEval[i] &#123;</span><br><span class="line">				<span class="keyword">if</span> _, ok := seriesReturned[metric]; !ok &#123;</span><br><span class="line">					<span class="comment">// Series no longer exposed, mark it stale.</span></span><br><span class="line">					_, err = app.Add(lset, timestamp.FromTime(ts), math.Float64frombits(value.StaleNaN))</span><br><span class="line">					<span class="keyword">switch</span> err &#123;</span><br><span class="line">					<span class="keyword">case</span> <span class="literal">nil</span>:</span><br><span class="line">					<span class="keyword">case</span> storage.ErrOutOfOrderSample, storage.ErrDuplicateSampleForTimestamp:</span><br><span class="line">						<span class="comment">// Do not count these in logging, as this is expected if series</span></span><br><span class="line">						<span class="comment">// is exposed from a different rule.</span></span><br><span class="line">					<span class="keyword">default</span>:</span><br><span class="line">						level.Warn(g.logger).Log(<span class="string">"msg"</span>, <span class="string">"adding stale sample failed"</span>, <span class="string">"sample"</span>, metric, <span class="string">"err"</span>, err)</span><br><span class="line">					&#125;</span><br><span class="line">				&#125;</span><br><span class="line">			&#125;</span><br><span class="line">			<span class="keyword">if</span> err := app.Commit(); err != <span class="literal">nil</span> &#123;</span><br><span class="line">				level.Warn(g.logger).Log(<span class="string">"msg"</span>, <span class="string">"rule sample appending failed"</span>, <span class="string">"err"</span>, err)</span><br><span class="line">			&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">				g.seriesInPreviousEval[i] = seriesReturned</span><br><span class="line">			&#125;</span><br><span class="line">		&#125;(i, rule)</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p><code>Eval</code>函数会按照顺序依次评价这个group中的每一个rule，通过调用rule的<code>Eval</code>函数产生告警结果，然后判断是否是告警规则，如果是，则调用<code>NotifyFunc</code>产生告警通知。<code>Eval</code>函数代码如下<br><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// Eval evaluates the rule expression and then creates pending alerts and fires</span></span><br><span class="line"><span class="comment">// or removes previously pending alerts accordingly.</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(r *AlertingRule)</span> <span class="title">Eval</span><span class="params">(ctx context.Context, ts time.Time, query QueryFunc, externalURL *url.URL)</span> <span class="params">(promql.Vector, error)</span></span> &#123;</span><br><span class="line">	res, err := query(ctx, r.vector.String(), ts)</span><br><span class="line">	<span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">		<span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	r.mtx.Lock()</span><br><span class="line">	<span class="keyword">defer</span> r.mtx.Unlock()</span><br><span class="line"></span><br><span class="line">	<span class="comment">// Create pending alerts for any new vector elements in the alert expression</span></span><br><span class="line">	<span class="comment">// or update the expression value for existing elements.</span></span><br><span class="line">	resultFPs := <span class="keyword">map</span>[<span class="keyword">uint64</span>]<span class="keyword">struct</span>&#123;&#125;&#123;&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">for</span> _, smpl := <span class="keyword">range</span> res &#123;</span><br><span class="line">		<span class="comment">// Provide the alert information to the template.</span></span><br><span class="line">		l := <span class="built_in">make</span>(<span class="keyword">map</span>[<span class="keyword">string</span>]<span class="keyword">string</span>, <span class="built_in">len</span>(smpl.Metric))</span><br><span class="line">		<span class="keyword">for</span> _, lbl := <span class="keyword">range</span> smpl.Metric &#123;</span><br><span class="line">			l[lbl.Name] = lbl.Value</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		tmplData := <span class="keyword">struct</span> &#123;</span><br><span class="line">			Labels <span class="keyword">map</span>[<span class="keyword">string</span>]<span class="keyword">string</span></span><br><span class="line">			Value  <span class="keyword">float64</span></span><br><span class="line">		&#125;&#123;</span><br><span class="line">			Labels: l,</span><br><span class="line">			Value:  smpl.V,</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="comment">// Inject some convenience variables that are easier to remember for users</span></span><br><span class="line">		<span class="comment">// who are not used to Go's templating system.</span></span><br><span class="line">		defs := <span class="string">"&#123;&#123;$labels := .Labels&#125;&#125;&#123;&#123;$value := .Value&#125;&#125;"</span></span><br><span class="line"></span><br><span class="line">		expand := <span class="function"><span class="keyword">func</span><span class="params">(text <span class="keyword">string</span>)</span> <span class="title">string</span></span> &#123;</span><br><span class="line">			tmpl := template.NewTemplateExpander(</span><br><span class="line">				ctx,</span><br><span class="line">				defs+<span class="keyword">string</span>(text),</span><br><span class="line">				<span class="string">"__alert_"</span>+r.Name(),</span><br><span class="line">				tmplData,</span><br><span class="line">				model.Time(timestamp.FromTime(ts)),</span><br><span class="line">				template.QueryFunc(query),</span><br><span class="line">				externalURL,</span><br><span class="line">			)</span><br><span class="line">			result, err := tmpl.Expand()</span><br><span class="line">			<span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">				result = fmt.Sprintf(<span class="string">"&lt;error expanding template: %s&gt;"</span>, err)</span><br><span class="line">				level.Warn(r.logger).Log(<span class="string">"msg"</span>, <span class="string">"Expanding alert template failed"</span>, <span class="string">"err"</span>, err, <span class="string">"data"</span>, tmplData)</span><br><span class="line">			&#125;</span><br><span class="line">			<span class="keyword">return</span> result</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		lb := labels.NewBuilder(smpl.Metric).Del(labels.MetricName)</span><br><span class="line"></span><br><span class="line">		<span class="keyword">for</span> _, l := <span class="keyword">range</span> r.labels &#123;</span><br><span class="line">			lb.Set(l.Name, expand(l.Value))</span><br><span class="line">		&#125;</span><br><span class="line">		lb.Set(labels.AlertName, r.Name())</span><br><span class="line"></span><br><span class="line">		annotations := <span class="built_in">make</span>(labels.Labels, <span class="number">0</span>, <span class="built_in">len</span>(r.annotations))</span><br><span class="line">		<span class="keyword">for</span> _, a := <span class="keyword">range</span> r.annotations &#123;</span><br><span class="line">			annotations = <span class="built_in">append</span>(annotations, labels.Label&#123;Name: a.Name, Value: expand(a.Value)&#125;)</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		h := smpl.Metric.Hash()</span><br><span class="line">		resultFPs[h] = <span class="keyword">struct</span>&#123;&#125;&#123;&#125;</span><br><span class="line"></span><br><span class="line">		<span class="comment">// Check whether we already have alerting state for the identifying label set.</span></span><br><span class="line">		<span class="comment">// Update the last value and annotations if so, create a new alert entry otherwise.</span></span><br><span class="line">		<span class="keyword">if</span> alert, ok := r.active[h]; ok &amp;&amp; alert.State != StateInactive &#123;</span><br><span class="line">			alert.Value = smpl.V</span><br><span class="line">			alert.Annotations = annotations</span><br><span class="line">			<span class="keyword">continue</span></span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		r.active[h] = &amp;Alert&#123;</span><br><span class="line">			Labels:      lb.Labels(),</span><br><span class="line">			Annotations: annotations,</span><br><span class="line">			ActiveAt:    ts,</span><br><span class="line">			State:       StatePending,</span><br><span class="line">			Value:       smpl.V,</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">var</span> vec promql.Vector</span><br><span class="line">	<span class="comment">// Check if any pending alerts should be removed or fire now. Write out alert timeseries.</span></span><br><span class="line">	<span class="keyword">for</span> fp, a := <span class="keyword">range</span> r.active &#123;</span><br><span class="line">		<span class="keyword">if</span> _, ok := resultFPs[fp]; !ok &#123;</span><br><span class="line">			<span class="comment">// If the alert was previously firing, keep it around for a given</span></span><br><span class="line">			<span class="comment">// retention time so it is reported as resolved to the AlertManager.</span></span><br><span class="line">			<span class="keyword">if</span> a.State == StatePending || (!a.ResolvedAt.IsZero() &amp;&amp; ts.Sub(a.ResolvedAt) &gt; resolvedRetention) &#123;</span><br><span class="line">				<span class="built_in">delete</span>(r.active, fp)</span><br><span class="line">			&#125;</span><br><span class="line">			<span class="keyword">if</span> a.State != StateInactive &#123;</span><br><span class="line">				a.State = StateInactive</span><br><span class="line">				a.ResolvedAt = ts</span><br><span class="line">			&#125;</span><br><span class="line">			<span class="keyword">continue</span></span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		<span class="keyword">if</span> a.State == StatePending &amp;&amp; ts.Sub(a.ActiveAt) &gt;= r.holdDuration &#123;</span><br><span class="line">			a.State = StateFiring</span><br><span class="line">			a.FiredAt = ts</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		vec = <span class="built_in">append</span>(vec, r.sample(a, ts))</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> vec, <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>该函数中，<code>res</code>是对告警规则计算的结果，<code>resultFPs</code>用来存放这次评价的得到的告警，key是label的hash值，value是<code>Alert</code>对象。<code>res</code>中的每个元素被解析，得到<code>Alert</code>中的各种信息，如果key值已经存在于<code>r.active</code>中，且告警状态不等于<code>StateInactive</code>，则说明此告警已经存在，需要对<code>Value</code>和<code>Annotations</code>进行更新，否则说明此告警是新产生告警或者是原先的<code>StateInactive</code>告警状态发生变化，需要向<code>resultFPs</code>存入一个新的告警对象，其状态为<code>StatePending</code>。当<code>res</code>中所有元素遍历过之后，<code>resultFPs</code>和<code>r.active</code>都得到了更新。然后，循环遍历<code>r.active</code>，如果当前对应<code>Alert</code>在<code>resultFPs</code>中不存在，则判断告警状态是否等于<code>StatePending</code>，或者<code>ResolvedAt</code>不等于0且<code>ResolvedAt</code>的时间距离<code>ts</code>（此轮评价开始时间）已经大于<code>resolvedRetention</code>（告警处于恢复状态超过15分钟），如果符合，则把此告警从<code>r.active</code>中删除，然后再判断告警状态是否不等于<code>StateInactive</code>，是的话就将告警状态置为<code>StateInactive</code>，且<code>ResolvedAt</code>设置为<code>ts</code>。无论当前对应<code>Alert</code>在<code>resultFPs</code>中是否存在，如果告警状态是<code>StatePending</code>且持续时间大于<code>holdDuration</code>，则把告警状态变为<code>StateFiring</code>，<code>FiredAt</code>设置为<code>ts</code>。当这些都完成后，<code>r.active</code>中保存的就是最新的告警。</p>
+<blockquote>
+<p>Prometheus定义了3种告警状态：</p>
+<p>StateInactive：不活动状态，即未超过阈值</p>
+<p>StatePending：待定状态，即超过阈值，但持续时间小于某个时间</p>
+<p>StateFiring：活动状态，即超过阈值，且持续时间大于某个时间</p>
+</blockquote>
+<p>在本文前面提到的创建<code>ruleManager</code>的代码中可以发现，<code>NotifyFunc</code>其实是<code>sendAlerts</code>得到的<br><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// sendAlerts implements the rules.NotifyFunc for a Notifier.</span></span><br><span class="line"><span class="comment">// It filters any non-firing alerts from the input.</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">sendAlerts</span><span class="params">(n *notifier.Manager, externalURL <span class="keyword">string</span>)</span> <span class="title">rules</span>.<span class="title">NotifyFunc</span></span> &#123;</span><br><span class="line">	<span class="keyword">return</span> <span class="function"><span class="keyword">func</span><span class="params">(ctx context.Context, expr <span class="keyword">string</span>, alerts ...*rules.Alert)</span> <span class="title">error</span></span> &#123;</span><br><span class="line">		<span class="keyword">var</span> res []*notifier.Alert</span><br><span class="line"></span><br><span class="line">		<span class="keyword">for</span> _, alert := <span class="keyword">range</span> alerts &#123;</span><br><span class="line">			<span class="comment">// Only send actually firing alerts.</span></span><br><span class="line">			<span class="keyword">if</span> alert.State == rules.StatePending &#123;</span><br><span class="line">				<span class="keyword">continue</span></span><br><span class="line">			&#125;</span><br><span class="line">			a := &amp;notifier.Alert&#123;</span><br><span class="line">				StartsAt:     alert.FiredAt,</span><br><span class="line">				Labels:       alert.Labels,</span><br><span class="line">				Annotations:  alert.Annotations,</span><br><span class="line">				GeneratorURL: externalURL + strutil.TableLinkForExpression(expr),</span><br><span class="line">			&#125;</span><br><span class="line">			<span class="keyword">if</span> !alert.ResolvedAt.IsZero() &#123;</span><br><span class="line">				a.EndsAt = alert.ResolvedAt</span><br><span class="line">			&#125;</span><br><span class="line">			res = <span class="built_in">append</span>(res, a)</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		<span class="keyword">if</span> <span class="built_in">len</span>(alerts) &gt; <span class="number">0</span> &#123;</span><br><span class="line">			n.Send(res...)</span><br><span class="line">		&#125;</span><br><span class="line">		<span class="keyword">return</span> <span class="literal">nil</span></span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p><code>sendAlerts</code>会过滤掉<code>StatePending</code>状态的告警，将<code>rules.Alert</code>转换成<code>notifier.Alert</code>，再把所有<code>notifier.Alert</code>放入一个切片，调用<code>Send</code>函数，告警会被放入到<code>notifier.Manager</code>的<code>queue</code>里面<br><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">n.queue = <span class="built_in">append</span>(n.queue, alerts...)</span><br></pre></td></tr></table></figure></p>
+<p><code>nextBatch</code>函数再把alert从queue中读取出来<br><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(n *Manager)</span> <span class="title">nextBatch</span><span class="params">()</span> []*<span class="title">Alert</span></span> &#123;</span><br><span class="line">	n.mtx.Lock()</span><br><span class="line">	<span class="keyword">defer</span> n.mtx.Unlock()</span><br><span class="line"></span><br><span class="line">	<span class="keyword">var</span> alerts []*Alert</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> <span class="built_in">len</span>(n.queue) &gt; maxBatchSize &#123;</span><br><span class="line">		alerts = <span class="built_in">append</span>(<span class="built_in">make</span>([]*Alert, <span class="number">0</span>, maxBatchSize), n.queue[:maxBatchSize]...)</span><br><span class="line">		n.queue = n.queue[maxBatchSize:]</span><br><span class="line">	&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">		alerts = <span class="built_in">append</span>(<span class="built_in">make</span>([]*Alert, <span class="number">0</span>, <span class="built_in">len</span>(n.queue)), n.queue...)</span><br><span class="line">		n.queue = n.queue[:<span class="number">0</span>]</span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> alerts</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p><code>sendAll</code>函数把这些alert并发地发送到所有配置的Alertmanager<br><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// sendAll sends the alerts to all configured Alertmanagers concurrently.</span></span><br><span class="line"><span class="comment">// It returns true if the alerts could be sent successfully to at least one Alertmanager.</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(n *Manager)</span> <span class="title">sendAll</span><span class="params">(alerts ...*Alert)</span> <span class="title">bool</span></span> &#123;</span><br><span class="line">	begin := time.Now()</span><br><span class="line"></span><br><span class="line">	b, err := json.Marshal(alerts)</span><br><span class="line">	<span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">		level.Error(n.logger).Log(<span class="string">"msg"</span>, <span class="string">"Encoding alerts failed"</span>, <span class="string">"err"</span>, err)</span><br><span class="line">		<span class="keyword">return</span> <span class="literal">false</span></span><br><span class="line">	&#125;</span><br><span class="line"></span><br><span class="line">	n.mtx.RLock()</span><br><span class="line">	amSets := n.alertmanagers</span><br><span class="line">	n.mtx.RUnlock()</span><br><span class="line"></span><br><span class="line">	<span class="keyword">var</span> (</span><br><span class="line">		wg         sync.WaitGroup</span><br><span class="line">		numSuccess <span class="keyword">uint64</span></span><br><span class="line">	)</span><br><span class="line">	<span class="keyword">for</span> _, ams := <span class="keyword">range</span> amSets &#123;</span><br><span class="line">		ams.mtx.RLock()</span><br><span class="line"></span><br><span class="line">		<span class="keyword">for</span> _, am := <span class="keyword">range</span> ams.ams &#123;</span><br><span class="line">			wg.Add(<span class="number">1</span>)</span><br><span class="line"></span><br><span class="line">			ctx, cancel := context.WithTimeout(n.ctx, ams.cfg.Timeout)</span><br><span class="line">			<span class="keyword">defer</span> cancel()</span><br><span class="line"></span><br><span class="line">			<span class="keyword">go</span> <span class="function"><span class="keyword">func</span><span class="params">(ams *alertmanagerSet, am alertmanager)</span></span> &#123;</span><br><span class="line">				u := am.url().String()</span><br><span class="line"></span><br><span class="line">				<span class="keyword">if</span> err := n.sendOne(ctx, ams.client, u, b); err != <span class="literal">nil</span> &#123;</span><br><span class="line">					level.Error(n.logger).Log(<span class="string">"alertmanager"</span>, u, <span class="string">"count"</span>, <span class="built_in">len</span>(alerts), <span class="string">"msg"</span>, <span class="string">"Error sending alert"</span>, <span class="string">"err"</span>, err)</span><br><span class="line">					n.metrics.errors.WithLabelValues(u).Inc()</span><br><span class="line">				&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">					atomic.AddUint64(&amp;numSuccess, <span class="number">1</span>)</span><br><span class="line">				&#125;</span><br><span class="line">				n.metrics.latency.WithLabelValues(u).Observe(time.Since(begin).Seconds())</span><br><span class="line">				n.metrics.sent.WithLabelValues(u).Add(<span class="keyword">float64</span>(<span class="built_in">len</span>(alerts)))</span><br><span class="line"></span><br><span class="line">				wg.Done()</span><br><span class="line">			&#125;(ams, am)</span><br><span class="line">		&#125;</span><br><span class="line">		ams.mtx.RUnlock()</span><br><span class="line">	&#125;</span><br><span class="line">	wg.Wait()</span><br><span class="line"></span><br><span class="line">	<span class="keyword">return</span> numSuccess &gt; <span class="number">0</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>发送到某个Alertmanager，使用的是<code>sendOne</code>函数<br><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(n *Manager)</span> <span class="title">sendOne</span><span class="params">(ctx context.Context, c *http.Client, url <span class="keyword">string</span>, b []<span class="keyword">byte</span>)</span> <span class="title">error</span></span> &#123;</span><br><span class="line">	req, err := http.NewRequest(<span class="string">"POST"</span>, url, bytes.NewReader(b))</span><br><span class="line">	<span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">		<span class="keyword">return</span> err</span><br><span class="line">	&#125;</span><br><span class="line">	req.Header.Set(<span class="string">"Content-Type"</span>, contentTypeJSON)</span><br><span class="line">	resp, err := n.opts.Do(ctx, c, req)</span><br><span class="line">	<span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">		<span class="keyword">return</span> err</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">defer</span> resp.Body.Close()</span><br><span class="line"></span><br><span class="line">	<span class="comment">// Any HTTP status 2xx is OK.</span></span><br><span class="line">	<span class="keyword">if</span> resp.StatusCode/<span class="number">100</span> != <span class="number">2</span> &#123;</span><br><span class="line">		<span class="keyword">return</span> fmt.Errorf(<span class="string">"bad response status %v"</span>, resp.Status)</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> err</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>该函数把告警通过HTTP POST请求发送到Alertmanager的URL。</p>
+
+      
+    </div>
+    
+    
+    
+
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+
+      
+      
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2018/05/29/prometheus-storage/" rel="next" title="Prometheus源码分析之数据存储">
+                <i class="fa fa-chevron-left"></i> Prometheus源码分析之数据存储
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+
+  
+    <div class="comments" id="comments">
+      
+        <div id="gitment-container"></div>
+      
+    </div>
+
+  
+
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    
+    <div class="sidebar-inner">
+
+      
+
+      
+
+      <section class="site-overview-wrap sidebar-panel sidebar-panel-active">
+        <div class="site-overview">
+          <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+            
+              <p class="site-author-name" itemprop="name">Han Wu</p>
+              <p class="site-description motion-element" itemprop="description"></p>
+          </div>
+
+          <nav class="site-state motion-element">
+
+            
+              <div class="site-state-item site-state-posts">
+              
+                <a href="/archives/">
+              
+                  <span class="site-state-item-count">3</span>
+                  <span class="site-state-item-name">日志</span>
+                </a>
+              </div>
+            
+
+            
+
+            
+
+          </nav>
+
+          
+
+          
+
+          
+          
+
+          
+          
+
+          
+
+        </div>
+      </section>
+
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">&copy; <span itemprop="copyrightYear">2018</span>
+  <span class="with-love">
+    <i class="fa fa-user"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Han Wu</span>
+
+  
+</div>
+
+
+  <div class="powered-by">由 <a class="theme-link" target="_blank" href="https://hexo.io">Hexo</a> 强力驱动</div>
+
+
+
+  <span class="post-meta-divider">|</span>
+
+
+
+  <div class="theme-info">主题 &mdash; <a class="theme-link" target="_blank" href="https://github.com/iissnan/hexo-theme-next">NexT.Gemini</a> v5.1.4</div>
+
+
+
+
+        
+
+
+
+
+
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+  
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.4"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.4"></script>
+
+
+
+  
+  
+
+
+  <script type="text/javascript" src="/js/src/affix.js?v=5.1.4"></script>
+
+  <script type="text/javascript" src="/js/src/schemes/pisces.js?v=5.1.4"></script>
+
+
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.4"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.4"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.4"></script>
+
+
+
+  
+
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+<!-- LOCAL: You can save these files to your site and update links -->
+    
+        
+        <link rel="stylesheet" href="https://aimingoo.github.io/gitmint/style/default.css">
+        <script src="https://aimingoo.github.io/gitmint/dist/gitmint.browser.js"></script>
+    
+<!-- END LOCAL -->
+
+    
+
+    
+      <script type="text/javascript">
+      function renderGitment(){
+        var gitment = new Gitmint({
+            id: window.location.pathname, 
+            owner: 'codwu',
+            repo: 'codwu.github.io',
+            
+            lang: "" || navigator.language || navigator.systemLanguage || navigator.userLanguage,
+            
+            oauth: {
+            
+            
+                client_secret: '16960df6562ef7698a099e909986e63d471c7215',
+            
+                client_id: '2456da3daceb4ccb1077'
+            }});
+        gitment.render('gitment-container');
+      }
+
+      
+      renderGitment();
+      
+      </script>
+    
+
+
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
