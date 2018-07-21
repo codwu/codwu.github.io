@@ -79,13 +79,17 @@
 
 
 
-<meta property="og:type" content="website">
-<meta property="og:title" content="Wu&#39;s blog">
-<meta property="og:url" content="http://yoursite.com/index.html">
+<meta name="description" content="本文从源码角度分析Prometheus查询数据的过程与原理，本文中的源码基于Prometheus 2.2.1版本。在实际应用中，我们通常会通过Prometheus的HTTP API进行数据的查询，Prometheus提供了多个查询API，这里仅以instant query为例，此API的使用格式为： URL  GET /api/v1/query  参数  query=&amp;lt;string&amp;gt;">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Prometheus-query">
+<meta property="og:url" content="http://yoursite.com/2018/07/21/Prometheus-query/index.html">
 <meta property="og:site_name" content="Wu&#39;s blog">
+<meta property="og:description" content="本文从源码角度分析Prometheus查询数据的过程与原理，本文中的源码基于Prometheus 2.2.1版本。在实际应用中，我们通常会通过Prometheus的HTTP API进行数据的查询，Prometheus提供了多个查询API，这里仅以instant query为例，此API的使用格式为： URL  GET /api/v1/query  参数  query=&amp;lt;string&amp;gt;">
 <meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2018-07-21T13:10:32.350Z">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Wu&#39;s blog">
+<meta name="twitter:title" content="Prometheus-query">
+<meta name="twitter:description" content="本文从源码角度分析Prometheus查询数据的过程与原理，本文中的源码基于Prometheus 2.2.1版本。在实际应用中，我们通常会通过Prometheus的HTTP API进行数据的查询，Prometheus提供了多个查询API，这里仅以instant query为例，此API的使用格式为： URL  GET /api/v1/query  参数  query=&amp;lt;string&amp;gt;">
 
 
 
@@ -115,13 +119,13 @@
 
 
 
-  <link rel="canonical" href="http://yoursite.com/"/>
+  <link rel="canonical" href="http://yoursite.com/2018/07/21/Prometheus-query/"/>
 
 
 
 
 
-  <title>Wu's blog</title>
+  <title>Prometheus-query | Wu's blog</title>
   
 
 
@@ -140,8 +144,7 @@
     
   
 
-  <div class="container sidebar-position-left 
-  page-home">
+  <div class="container sidebar-position-left page-post-detail">
     <div class="headband"></div>
 
     <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
@@ -214,9 +217,9 @@
         <div class="content-wrap">
           <div id="content" class="content">
             
-  <section id="posts" class="posts-expand">
+
+  <div id="posts" class="posts-expand">
     
-      
 
   
 
@@ -246,9 +249,7 @@
 
         
         
-          <h1 class="post-title" itemprop="name headline">
-                
-                <a class="post-title-link" href="/2018/07/21/Prometheus-query/" itemprop="url">Prometheus-query</a></h1>
+          <h1 class="post-title" itemprop="name headline">Prometheus-query</h1>
         
 
         <div class="post-meta">
@@ -274,6 +275,16 @@
 
           
             
+              <span class="post-comments-count">
+                <span class="post-meta-divider">|</span>
+                <span class="post-meta-item-icon">
+                  <i class="fa fa-comment-o"></i>
+                </span>
+                <a href="/2018/07/21/Prometheus-query/#comments" itemprop="discussionUrl">
+                  <span class="post-comments-count gitment-comments-count" data-xid="/2018/07/21/Prometheus-query/" itemprop="commentsCount"></span>
+                </a>
+              </span>
+            
           
 
           
@@ -298,9 +309,7 @@
       
 
       
-        
-          
-            <p>本文从源码角度分析Prometheus查询数据的过程与原理，本文中的源码基于Prometheus 2.2.1版本。<br>在实际应用中，我们通常会通过Prometheus的HTTP API进行数据的查询，Prometheus提供了多个查询API，这里仅以instant query为例，此API的使用格式为：</p>
+        <p>本文从源码角度分析Prometheus查询数据的过程与原理，本文中的源码基于Prometheus 2.2.1版本。<br>在实际应用中，我们通常会通过Prometheus的HTTP API进行数据的查询，Prometheus提供了多个查询API，这里仅以instant query为例，此API的使用格式为：</p>
 <p>URL</p>
 <blockquote>
 <p>GET /api/v1/query</p>
@@ -324,8 +333,6 @@
 <figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// Select returns a set of series that matches the given label matchers.</span></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="params">(q *mergeQuerier)</span> <span class="title">Select</span><span class="params">(params *SelectParams, matchers ...*labels.Matcher)</span> <span class="params">(SeriesSet, error)</span></span> &#123;</span><br><span class="line">	seriesSets := <span class="built_in">make</span>([]SeriesSet, <span class="number">0</span>, <span class="built_in">len</span>(q.queriers))</span><br><span class="line">	<span class="keyword">for</span> _, querier := <span class="keyword">range</span> q.queriers &#123;</span><br><span class="line">		set, err := querier.Select(params, matchers...)</span><br><span class="line">		<span class="keyword">if</span> err != <span class="literal">nil</span> &#123;</span><br><span class="line">			<span class="keyword">return</span> <span class="literal">nil</span>, err</span><br><span class="line">		&#125;</span><br><span class="line">		seriesSets = <span class="built_in">append</span>(seriesSets, set)</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> NewMergeSeriesSet(seriesSets), <span class="literal">nil</span></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
 <p>类似querier的处理方式，先对各querier调用<code>Select</code>得到<code>SeriesSet</code>，最后进行合并。<code>SeriesSet</code>再经过<code>expandSeriesSet</code>就得到了<code>Series</code>的切片，其中<code>Series</code>就代表了单独一个时间序列。</p>
 
-          
-        
       
     </div>
     
@@ -342,139 +349,28 @@
       
 
       
-
-      
-
       
       
-        <div class="post-eof"></div>
+
       
-    </footer>
-  </div>
-  
-  
-  
-  </article>
-
-
-    
-      
-
-  
-
-  
-  
-  
-
-  <article class="post post-type-normal" itemscope itemtype="http://schema.org/Article">
-  
-  
-  
-  <div class="post-block">
-    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2018/06/06/Prometheus-alert/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="name" content="Han Wu">
-      <meta itemprop="description" content="">
-      <meta itemprop="image" content="/images/avatar.gif">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Wu's blog">
-    </span>
-
-    
-      <header class="post-header">
-
-        
-        
-          <h1 class="post-title" itemprop="name headline">
-                
-                <a class="post-title-link" href="/2018/06/06/Prometheus-alert/" itemprop="url">Prometheus源码分析之告警</a></h1>
-        
-
-        <div class="post-meta">
-          <span class="post-time">
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
             
-              <span class="post-meta-item-icon">
-                <i class="fa fa-calendar-o"></i>
-              </span>
-              
-                <span class="post-meta-item-text">发表于</span>
-              
-              <time title="创建于" itemprop="dateCreated datePublished" datetime="2018-06-06T23:00:11+08:00">
-                2018-06-06
-              </time>
+              <a href="/2018/06/06/Prometheus-alert/" rel="next" title="Prometheus源码分析之告警">
+                <i class="fa fa-chevron-left"></i> Prometheus源码分析之告警
+              </a>
             
+          </div>
 
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
             
-
-            
-          </span>
-
-          
-
-          
-            
-          
-
-          
-          
-
-          
-
-          
-
-          
-
+          </div>
         </div>
-      </header>
-    
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
       
 
       
-        
-          <p>本文从源码角度分析了Prometheus的告警功能实现原理，需要注意，本文中的源码基于Prometheus 2.2.1版本，在分析过程中，只注重告警相关代码逻辑，而忽略了其他无关代码。</p>
-<p>Prometheus的告警也是通过<code>Manager</code>进行管理的，其结构和构造函数如下<br><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">type</span> Manager <span class="keyword">struct</span> &#123;</span><br><span class="line">	opts   *ManagerOptions</span><br><span class="line">	groups <span class="keyword">map</span>[<span class="keyword">string</span>]*Group</span><br><span class="line">	mtx    sync.RWMutex</span><br><span class="line">	block  <span class="keyword">chan</span> <span class="keyword">struct</span>&#123;&#125;</span><br><span class="line"></span><br><span class="line">	logger log.Logger</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">func</span> <span class="title">NewManager</span><span class="params">(o *ManagerOptions)</span> *<span class="title">Manager</span></span> &#123;</span><br><span class="line">	m := &amp;Manager&#123;</span><br><span class="line">		groups: <span class="keyword">map</span>[<span class="keyword">string</span>]*Group&#123;&#125;,</span><br><span class="line">		opts:   o,</span><br><span class="line">		block:  <span class="built_in">make</span>(<span class="keyword">chan</span> <span class="keyword">struct</span>&#123;&#125;),</span><br><span class="line">		logger: o.Logger,</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">if</span> o.Registerer != <span class="literal">nil</span> &#123;</span><br><span class="line">		o.Registerer.MustRegister(m)</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">return</span> m</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
-<p>构造函数主要负责初始化<code>ManagerOptions</code>。</p>
-<p>在main.go中，创建了一个<code>ruleManager</code><br><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">ruleManager = rules.NewManager(&amp;rules.ManagerOptions&#123;</span><br><span class="line">			Appendable:  fanoutStorage,</span><br><span class="line">			QueryFunc:   rules.EngineQueryFunc(queryEngine, fanoutStorage),</span><br><span class="line">			NotifyFunc:  sendAlerts(notifier, cfg.web.ExternalURL.String()),</span><br><span class="line">			Context:     ctxRule,</span><br><span class="line">			ExternalURL: cfg.web.ExternalURL,</span><br><span class="line">			Registerer:  prometheus.DefaultRegisterer,</span><br><span class="line">			Logger:      log.With(logger, <span class="string">"component"</span>, <span class="string">"rule manager"</span>),</span><br><span class="line">        &#125;</span><br></pre></td></tr></table></figure></p>
-          <!--noindex-->
-          <div class="post-button text-center">
-            <a class="btn" href="/2018/06/06/Prometheus-alert/#more" rel="contents">
-              阅读全文 &raquo;
-            </a>
-          </div>
-          <!--/noindex-->
-        
-      
-    </div>
-    
-    
-    
-
-    
-
-    
-
-    
-
-    <footer class="post-footer">
-      
-
-      
-
-      
-
-      
-      
-        <div class="post-eof"></div>
       
     </footer>
   </div>
@@ -484,266 +380,29 @@
   </article>
 
 
-    
-      
 
-  
-
-  
-  
-  
-
-  <article class="post post-type-normal" itemscope itemtype="http://schema.org/Article">
-  
-  
-  
-  <div class="post-block">
-    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2018/05/29/prometheus-storage/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="name" content="Han Wu">
-      <meta itemprop="description" content="">
-      <meta itemprop="image" content="/images/avatar.gif">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Wu's blog">
-    </span>
-
-    
-      <header class="post-header">
-
-        
-        
-          <h1 class="post-title" itemprop="name headline">
-                
-                <a class="post-title-link" href="/2018/05/29/prometheus-storage/" itemprop="url">Prometheus源码分析之数据存储</a></h1>
-        
-
-        <div class="post-meta">
-          <span class="post-time">
-            
-              <span class="post-meta-item-icon">
-                <i class="fa fa-calendar-o"></i>
-              </span>
-              
-                <span class="post-meta-item-text">发表于</span>
-              
-              <time title="创建于" itemprop="dateCreated datePublished" datetime="2018-05-29T19:39:43+08:00">
-                2018-05-29
-              </time>
-            
-
-            
-
-            
-          </span>
-
-          
-
-          
-            
-          
-
-          
-          
-
-          
-
-          
-
-          
-
-        </div>
-      </header>
-    
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-      
-
-      
-        
-          <p>本文从源码角度分析了Prometheus的数据存储原理，需要注意，本文中的源码基于Prometheus 2.2.1版本，在分析过程中，只注重数据存储相关代码逻辑，而忽略了其他无关代码。</p>
-<p>在“Prometheus源码分析之数据采集”的分析中，我们提到了在Prometheus采集到数据后，会保存数据，相关代码如下<br><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line">b := sl.buffers.Get(sl.lastScrapeSize).([]<span class="keyword">byte</span>)</span><br><span class="line">		buf := bytes.NewBuffer(b)</span><br><span class="line"></span><br><span class="line">		scrapeErr := sl.scraper.scrape(scrapeCtx, buf)</span><br><span class="line">		cancel()</span><br><span class="line"></span><br><span class="line">		<span class="keyword">if</span> scrapeErr == <span class="literal">nil</span> &#123;</span><br><span class="line">			b = buf.Bytes()</span><br><span class="line">			<span class="comment">// <span class="doctag">NOTE:</span> There were issues with misbehaving clients in the past</span></span><br><span class="line">			<span class="comment">// that occasionally returned empty results. We don't want those</span></span><br><span class="line">			<span class="comment">// to falsely reset our buffer size.</span></span><br><span class="line">			<span class="keyword">if</span> <span class="built_in">len</span>(b) &gt; <span class="number">0</span> &#123;</span><br><span class="line">				sl.lastScrapeSize = <span class="built_in">len</span>(b)</span><br><span class="line">			&#125;</span><br><span class="line">		&#125; <span class="keyword">else</span> &#123;</span><br><span class="line">			level.Debug(sl.l).Log(<span class="string">"msg"</span>, <span class="string">"Scrape failed"</span>, <span class="string">"err"</span>, scrapeErr.Error())</span><br><span class="line">			<span class="keyword">if</span> errc != <span class="literal">nil</span> &#123;</span><br><span class="line">				errc &lt;- scrapeErr</span><br><span class="line">			&#125;</span><br><span class="line">		&#125;</span><br><span class="line"></span><br><span class="line">		<span class="comment">// A failed scrape is the same as an empty scrape,</span></span><br><span class="line">		<span class="comment">// we still call sl.append to trigger stale markers.</span></span><br><span class="line">		total, added, appErr := sl.<span class="built_in">append</span>(b, start)</span><br></pre></td></tr></table></figure></p>
-          <!--noindex-->
-          <div class="post-button text-center">
-            <a class="btn" href="/2018/05/29/prometheus-storage/#more" rel="contents">
-              阅读全文 &raquo;
-            </a>
-          </div>
-          <!--/noindex-->
-        
+    <div class="post-spread">
       
     </div>
-    
-    
-    
-
-    
-
-    
-
-    
-
-    <footer class="post-footer">
-      
-
-      
-
-      
-
-      
-      
-        <div class="post-eof"></div>
-      
-    </footer>
   </div>
-  
-  
-  
-  </article>
 
 
-    
-      
-
-  
-
-  
-  
-  
-
-  <article class="post post-type-normal" itemscope itemtype="http://schema.org/Article">
-  
-  
-  
-  <div class="post-block">
-    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2018/05/25/Prometheus-scrape/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="name" content="Han Wu">
-      <meta itemprop="description" content="">
-      <meta itemprop="image" content="/images/avatar.gif">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="Wu's blog">
-    </span>
-
-    
-      <header class="post-header">
-
-        
-        
-          <h1 class="post-title" itemprop="name headline">
-                
-                <a class="post-title-link" href="/2018/05/25/Prometheus-scrape/" itemprop="url">Prometheus源码分析之数据采集</a></h1>
-        
-
-        <div class="post-meta">
-          <span class="post-time">
-            
-              <span class="post-meta-item-icon">
-                <i class="fa fa-calendar-o"></i>
-              </span>
-              
-                <span class="post-meta-item-text">发表于</span>
-              
-              <time title="创建于" itemprop="dateCreated datePublished" datetime="2018-05-25T22:57:15+08:00">
-                2018-05-25
-              </time>
-            
-
-            
-
-            
-          </span>
-
-          
-
-          
-            
-          
-
-          
-          
-
-          
-
-          
-
-          
-
-        </div>
-      </header>
-    
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-      
-
-      
-        
-          <p>本文从源码角度分析了Prometheus的数据采集原理，需要注意，本文中的源码基于Prometheus 2.2.1版本，在分析过程中，只注重数据采集相关代码逻辑，而忽略了其他无关代码。<br>Prometheus的数据采集是由<code>scrape.Manager</code>进行管理的，<code>Manager</code>的源码如下<br><figure class="highlight go"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// Manager maintains a set of scrape pools and manages start/stop cycles</span></span><br><span class="line"><span class="comment">// when receiving new target groups form the discovery manager.</span></span><br><span class="line"><span class="keyword">type</span> Manager <span class="keyword">struct</span> &#123;</span><br><span class="line">	logger    log.Logger</span><br><span class="line">	<span class="built_in">append</span>    Appendable</span><br><span class="line">	graceShut <span class="keyword">chan</span> <span class="keyword">struct</span>&#123;&#125;</span><br><span class="line"></span><br><span class="line">	mtxTargets     sync.Mutex <span class="comment">// Guards the fields below.</span></span><br><span class="line">	targetsActive  []*Target</span><br><span class="line">	targetsDropped []*Target</span><br><span class="line">	targetsAll     <span class="keyword">map</span>[<span class="keyword">string</span>][]*Target</span><br><span class="line"></span><br><span class="line">	mtxScrape     sync.Mutex <span class="comment">// Guards the fields below.</span></span><br><span class="line">	scrapeConfigs <span class="keyword">map</span>[<span class="keyword">string</span>]*config.ScrapeConfig</span><br><span class="line">	scrapePools   <span class="keyword">map</span>[<span class="keyword">string</span>]*scrapePool</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
-          <!--noindex-->
-          <div class="post-button text-center">
-            <a class="btn" href="/2018/05/25/Prometheus-scrape/#more" rel="contents">
-              阅读全文 &raquo;
-            </a>
           </div>
-          <!--/noindex-->
-        
+          
+
+
+          
+
+  
+    <div class="comments" id="comments">
+      
+        <div id="gitment-container"></div>
       
     </div>
-    
-    
-    
-
-    
-
-    
-
-    
-
-    <footer class="post-footer">
-      
-
-      
-
-      
-
-      
-      
-        <div class="post-eof"></div>
-      
-    </footer>
-  </div>
-  
-  
-  
-  </article>
-
-
-    
-  </section>
 
   
 
 
-          </div>
-          
-
-
-          
 
         </div>
         
@@ -947,6 +606,10 @@
 
 
   
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.4"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.4"></script>
+
+
 
   
 
@@ -993,6 +656,30 @@
 
     
 
+    
+      <script type="text/javascript">
+      function renderGitment(){
+        var gitment = new Gitmint({
+            id: window.location.pathname, 
+            owner: 'codwu',
+            repo: 'codwu.github.io',
+            
+            lang: "" || navigator.language || navigator.systemLanguage || navigator.userLanguage,
+            
+            oauth: {
+            
+            
+                client_secret: '16960df6562ef7698a099e909986e63d471c7215',
+            
+                client_id: '2456da3daceb4ccb1077'
+            }});
+        gitment.render('gitment-container');
+      }
+
+      
+      renderGitment();
+      
+      </script>
     
 
 
